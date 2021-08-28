@@ -1,0 +1,217 @@
+---
+title: Predicting CMV Crashes
+author: Donald Ruud
+date: '2021-04-23'
+slug: []
+categories:
+  - Time Series Analysis
+  - Project
+  - R
+tags:
+  - Project
+  - Time Series Analysis
+meta_img: images/image.png
+description: Description for the page
+---
+
+These data come from the Federal Motor Carrier Safety Administration and track details about Commercial Motor Vehicle Accidents from 2018 - 2020.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Load necessary packages
+library(tidyverse)
+library(lubridate)
+library(fpp3)
+library(fabletools)
+library(tidyquant)
+library(fpp2)
+```
+
+## Read in Data
+We'll begin by reading in the crash data for 2018, 2019, and 2020.
+```{r download, results='hide', warning=FALSE, message=FALSE}
+# Read in data, 2018, 2019, 2020
+CrashMaster2018 <- read_delim("C:/Users/Donald/Documents/Willamette University/Times Series Analysis/Project/Data/Crash_2018HDR/CrashMaster_01012018_12312018HDR.txt", 
+                                               "\t", escape_double = FALSE, trim_ws = TRUE)
+CrashMaster2019 <- read_delim("C:/Users/Donald/Documents/Willamette University/Times Series Analysis/Project/Data/Crash_2019HDR/CrashMaster_01012019_12312019HDR.txt", 
+                                               "\t", escape_double = FALSE, trim_ws = TRUE)
+CrashMaster2020 <- read_delim("C:/Users/Donald/Documents/Willamette University/Times Series Analysis/Project/Data/Crash_2020HDR/CrashMaster_01012020_12312020HDR.txt", 
+                                               "\t", escape_double = FALSE, trim_ws = TRUE)
+```
+
+## Clean-Up
+We'll combine the years together and collapse up to daily crashes on a national level.
+Then we'll check for NA values in the dataset.
+All data after August 31, 2020 will be dropped from the dataset due to the potential for under counting.
+Finally, REPORT_DATE will be converted into a Date class, we'll tidy the environment up, rename "n" as "crashes", and transform the tibble into a tsibble.
+```{r processing}
+# Combine into one object
+CrashesCombined <- rbind(CrashMaster2018, CrashMaster2019, CrashMaster2020)
+
+# Collapse up to daily records
+  # num accidents and date
+CrashesCollapsed <- CrashesCombined %>%
+  group_by(REPORT_DATE) %>%
+  count()
+
+# Check for NAs and remove if necessary
+summary(CrashesCollapsed)
+  # No NAs noted
+
+# Trim off from August 31, 2020 due to data integrity concerns
+  # States are oftentimes delayed on submitting crash information by around a quarter or more and as a result I doubt the reliability of data after that date. Data past Auguest 31, 2020 may under-count the number of accidents.
+  # 20200831 is last date to consider
+CrashesTrimmed <- CrashesCollapsed %>%
+  filter(REPORT_DATE <= 20200831)
+
+# Convert REPORT_DATE to a date and not a dble
+Crashesfinal <- CrashesTrimmed
+Crashesfinal$REPORT_DATE <- ymd(Crashesfinal$REPORT_DATE)
+
+# Clean up Environment
+rm(CrashesCollapsed, CrashesCombined, CrashesTrimmed, CrashMaster2018, CrashMaster2019, CrashMaster2020)
+
+# Rename n as crashes
+Crashesfinal <- rename(Crashesfinal, crashes = n)
+
+# Convert object to a tsibble
+Crashesfinal <- as_tsibble(Crashesfinal)
+
+# Pull out a Box Cox lambda just in case
+lambdaD <-Crashesfinal %>%
+  features(crashes, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+# Take a look at our tsibble!
+head(Crashesfinal)
+```
+
+## Plot the Initial Series
+Now that we've processed our data, let's take a look at it!
+```{r initial_graph}
+Crashesfinal %>%
+  autoplot() +
+  labs(title = "Daily Crashes 2018-01-01 to 2020-08-31",
+       y = "Number of Crashes",
+       x = "Crash Date") +
+  theme_bw()
+```
+
+We're dealing with daily data over about two and a half years, so there are quite a few data points.
+The data appear to have some kind of pattern to them and the impact of COVID is easily seen.
+It's debatable whether a Box Cox transformation is necessary, but we'll try nominal and transformed in our models.
+Before COVID, you might be able to call the data stationary in their raw form. Unfortunately, COVID happened and we'll certainly have to do some differencing in order to attain stationarity.
+
+## View the ACF and PACF
+While we're here, we might as well pull up the acf and pacf.
+```{r autocorrelations}
+Crashesfinal %>%
+  gg_tsdisplay(crashes, plot_type = 'partial')
+```
+
+There are some very strong correlations within the data for both the ACF and PACF.
+
+Let's also take a quick look at the first level differenced values for the data.
+```{r differenced}
+Crashesfinal %>% stl(s.window = "periodic") %>% seasadj() -> crashadj
+crashadj %>% diff() %>% ggtsdisplay(main = "")
+```
+
+We see slightly different correlations in our differenced dataset.
+
+## STL Decomposition
+Now is probably a good time to look at a decomposition of the data before we dive into modeling.
+```{r decomp}
+# Perform a times series decomposition
+crashdecomp <- Crashesfinal %>%
+  model(STL(crashes))
+
+  # Visualize the decomposition
+components(crashdecomp) %>% autoplot() +
+  theme_bw()
+```
+
+The STL Decomposition shows us both weekly seasonality and yearly seasonality in our data.
+Overall, it does a fairly decent job of splitting the data into its component parts.
+The remainder still appears to have some regular spikes, but is mostly random.
+
+
+## Modeling Preparation
+Before we move into modeling, let's go ahead and split our data. We'll aim for a 90 day prediction window.
+```{r splitting}
+crashtraining <- Crashesfinal %>%
+  filter_index("2018-01-01" ~ "2020-06-02")
+crashtest <- Crashesfinal %>%
+  filter_index("2020-06-03" ~ .)
+```
+
+
+## Modeling
+Alright, let's go ahead and fit our models. We'll be fitting nominal and Box Cox transformed versions of ETS, ARIMA, and a Neural Net. 
+```{r modeling cache = TRUE}
+crash_fit <-  crashtraining %>%
+  model(
+    ETS = ETS(crashes ~ error("A") + trend("A") + season("A")),
+    ETSbc = ETS(box_cox(crashes, lambdaD) ~ error("A") + trend("A") + season("A")),
+    ARIMA210016 = ARIMA(crashes ~ 0 + pdq(2,0,0) + PDQ(0,0,6)),
+    ARIMA210016bc = ARIMA(box_cox(crashes, lambdaD) ~ 0 + pdq(2,0,0) + PDQ(0,0,6)),
+    ARIMA = ARIMA(crashes, stepwise = FALSE, approx = FALSE),
+    ARIMAbc = ARIMA(box_cox(crashes, lambdaD), stepwise = FALSE, approx = FALSE),
+    NNET = NNETAR(crashes),
+    NNETbc = NNETAR(box_cox(crashes, lambdaD))
+  )
+```
+
+
+## Forecasting
+Forecast the models.
+```{r Forecast cache = TRUE}
+Crash_fc <- crash_fit  %>%
+  forecast(h = 90, new_data = crashtest)
+```
+
+## Evaluate Model Accuracy
+Evaluate all the models and sort by RMSE
+```{r AccFD}
+Crash_fc %>%
+  accuracy(crashtest) %>%
+  arrange(RMSE)
+```
+The Box Cox-Transformed ETS model is by far our best performing model.
+
+
+## Plot ETSbc
+Let's plot the best model against the test set.
+```{r}
+Crash_fc %>% 
+  filter(.model=="ETSbc") %>% 
+  autoplot(Crashesfinal %>% filter(REPORT_DATE > as.Date("2020-06-03")), color = "#1b9e77") +
+  theme_bw()
+```
+
+## ACF of ETSbc Residuals
+Evaluate the Residuals ACF to see if there are remaining patterns.
+```{r}
+crash_fit %>% select(ETSbc) %>% augment() %>% ACF(.resid) %>% autoplot() +
+  theme_bw()
+```
+
+There do appear to be some significant patterns present.
+It may be possible to account for these patterns with some additional model tuning.
+We'll push forward with our current model, confident that it does a satisfactory job of predicting future crashes.
+
+## Predicting on the Whole Dataset
+
+```{r Future}
+ETSbc_fc <- Crashesfinal %>%
+  model(ETSbc = ETS(box_cox(crashes, lambdaD) ~ error("A") + trend("A") + season("A"))) %>%
+  forecast(h = 90)
+ETSbc_fc %>%
+  autoplot(Crashesfinal %>% filter_index("2020-02-01" ~ .), color = "#1b9e77") +
+  labs(title = "Predicted Daily Crashes, 90-day Forecast",
+       y = "Number of Crashes",
+       x = "Crash Date") +
+  theme_bw()
+
+```

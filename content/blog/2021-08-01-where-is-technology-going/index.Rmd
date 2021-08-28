@@ -1,0 +1,303 @@
+---
+title: Where is Technology Going?
+author: Donald Ruud
+date: '2021-08-01'
+slug: []
+categories:
+  - Text Analysis
+  - Principle Component Analysis
+  - Capstone
+  - R
+tags:
+  - Project
+  - Principle Component Analysis
+  - PCA
+meta_img: images/image.png
+description: Description for the page
+---
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(tidyverse)
+mega_abstract <- read_csv("C:/Users/Donald/Documents/Willamette University/Capstone/mega_abstract")
+prc <- read_csv("C:/Users/Donald/Documents/Willamette University/Capstone/finaldatasetPCA")
+title_tib <- read_csv("C:/Users/Donald/Documents/Willamette University/Capstone/title_tib")
+abstract <- read_csv("C:/Users/Donald/Documents/Willamette University/Capstone/abstractdirty")
+# Summarize to the day level
+title_tib_day <- title_tib %>%
+  group_by(testdate2, word) %>%
+  summarise(n = sum(n))
+```
+
+## Analyzing Tech Article Text Data
+
+The smell of sawdust and the rumble of machinery fills your ears. Your arms ache and your back hurts, everything hurts, seems like it always does these days. It's all just another day at the mill. It's hot August afternoons like these that make you wonder, "How did I end up here? I was working as a data analyst and after a few years I was laid off and no one else wanted to hire me."
+
+Well, don't ask me. I might be the one writing the story, but I don't know your personal history. Maybe you didn't keep up on new developments in the field? Maybe you're just a pain to work with? I can't help with the latter, but we can analyze tech articles from <https://technews.acm.org/> and try to identify major developments in the industry.
+
+The tech articles we're using describe current events related to technology, science, data, etc. We'll apply some basic text analysis techniques and then try something more complex with Principle Component Analysis. The goal of this project is to see how Data Science has changed over time from a more general tech perspective.
+
+## High Level Results
+
+###### *For those who don't like waiting.*
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(lubridate)
+library(plotly)
+# Trying to average to the month level to tease out trends
+prc_month_avg <- prc
+prc_month_avg$Month_Yr <- format(as.Date(prc_month_avg$testdate2), "%Y-%m")
+
+
+prc_month_avg <- prc_month_avg%>%
+  group_by(Month_Yr) %>%
+  summarise(Female_STEM_month = mean(Female_STEM),
+            Users_Not_Microchips_month = mean(Users_Not_Microchips),
+            Female_Education_Not_Cybersecurity_month = mean(Female_Education_Not_Cybersecurity),
+            Cutting_Edge_Computing_month = mean(Cutting_Edge_Computing),
+            Self_Driving_Cars_month = mean(Self_Driving_Cars),
+            US_Cybersecurity_month = mean(US_Cybersecurity),
+            UX_month = mean(UX),
+            Healthcare_month = mean(Healthcare))
+
+colors <- c("Female_STEM" = "#1b9e77", "Users_Not_Microchips" = "#d95f02", "Healthcare" = "#7570b3", "Self_Driving_Cars" = "#e7298a", "Female_Education_Not_Cybersecurity" = "#66a61e", "Cutting_Edge_Computing" = "#e6ab02", "US_Cybersecurity" = "#a6761d", "UX" = "#666666")
+
+
+pc_plot <- ggplot(data = prc_month_avg, aes(x = parse_date_time(Month_Yr, "ym"), y = Female_STEM_month, group = 1)) +
+  geom_smooth(aes(color = "Female_STEM"), se = FALSE) +
+  geom_smooth(aes(y = Users_Not_Microchips_month, color = "Users_Not_Microchips"), se = FALSE) +
+  geom_smooth(aes(y = Healthcare_month, color = "Healthcare"), se = FALSE) +
+  geom_smooth(aes(y = Self_Driving_Cars_month, color = "Self_Driving_Cars"), se = FALSE) +
+  geom_smooth(aes(y = Female_Education_Not_Cybersecurity_month, color = "Female_Education_Not_Cybersecurity"), se = FALSE) +
+  geom_smooth(aes(y = Cutting_Edge_Computing_month, color = "Cutting_Edge_Computing"), se = FALSE) +
+  geom_smooth(aes(y = US_Cybersecurity_month, color = "US_Cybersecurity"), se = FALSE) +
+  geom_smooth(aes(y = UX_month, color = "UX"), se = FALSE) +
+  theme_classic() +
+  ylab("Category Strength") +
+  xlab("Time") +
+  labs(color = "Legend") +
+  scale_color_manual(values = colors) +
+  ggtitle("Cybersecurity Captures the Minds of Tech Writers")
+
+ggplotly(pc_plot)
+```
+
+There you go. This is the crown jewel of the project.\
+Wait, you want me to actually explain the results to you? I can't just show this graph to satisfy the impatient among you?\
+Fine, here are the highlights:
+
+-   Cyber Security has been a scorching hot topic recently and looks like it may continue to be.
+-   Articles that **ignore** silicon manufacturing and **emphasize** users and identifiers have been consistently strong and appear to be getting stronger.
+-   Cutting Edge Computing was building steadily until about 2014 when people realized that quantum computers were still 10-15 years away.
+-   Interest in Cutting Edge Computing recently soared again and appears to have a strong upward trend in tech discussions.
+
+#### Time to dive into the details!
+
+## Article Roadmap
+
+###### *Ha! Got you! No details just yet, but I got you this cool roadmap so you don't get lost!*
+
+[Background]\
+[Process]\
+[Data Acquisition, Cleaning, and Exploration]\
+[Results]
+
+## Background
+
+###### *Now we can actually get into the details.*
+
+Data Science is a relatively new industry that has only recently begun to solidify. We can trace elements of Data Science far back into history, but it's only within the past few decades that computing technology advanced enough to make widespread statistical analyses feasible. Data Science as a field has shifted a lot over the past 20 years. Specifically, the way we talk about Data Science and the various concepts that are important.
+
+What is the problem? Currently, we base our thoughts on the "next big thing" in Data Science on theory and, for lack of a better term, hype. Theory in of itself is not a bad place to start, but it's not always right when it comes to predicting changes in the industry. For example, the theory behind quantum computing is solid, but actually getting it to work at scale is a significant challenge. Hype on the other hand is driven oftentimes by irrational excitement about a product, service, or concept. Due to the malleable nature of Data Science, we need to be aware of what ideas are most popular and know if there's anything useful behind them.
+
+We need to make sure that we are prepared as industry professionals to use and understand new technology as it emerges. But we also need to be able to cut through the passing fads and provide real, actionable solutions to our employers. Being behind the curve in Data Science can hamper your capabilities and your career.
+
+## Process
+
+So how are we going to solve the problem?
+
+-   Scrape article archives from <https://technews.acm.org/> (Dec 2007 to June 2021)
+-   Do **a lot** of data cleaning
+-   Get the top 10 most used title words and visualize them
+-   Spice things up with a Principle Component Analysis (PCA) of the abstracts
+
+A couple of extra notes here. We're looking at titles here as a shorthand for each article's topic. It's a fairly reasonable assumption that the title of an article will have something to do with the content in it. Our next step after that is to perform a PCA on the article abstracts. The idea here is that the abstracts will give us a more granular picture of the content of each article.
+
+### PCA Side-bar
+
+###### *You can skip this section if you don't care about what PCA is or how it works*
+
+The simplest way to think of PCA is that it tells you which variables tend to hang together. Variables which all have large positive coefficients for a given principle component exert a greater effect on that component.
+
+PCA is typically used for dimensionality reduction (*reducing the number variables you have*). Essentially, it takes your data and creates a series of linear equations, these are the principle components. Each principle component has coefficients for every variable in your dataset. And just like with linear equations, larger coefficients (positive and negative) define what is most important in a given principle component.
+
+But, I'm not trying to write a post on the intricate details of PCA so **back to the analysis!**
+
+## Data Acquisition, Cleaning, and Exploration
+
+As mentioned earlier, these data have been scraped from <https://technews.acm.org/> and cover a period from December 2007 to June 2021. If you haven't scraped data or dealt with scraped data before, I'll tell you a little secret, it's **incredibly messy.** What, you don't believe me? Take a look at the raw abstracts:
+
+```{r warning=FALSE, echo=FALSE}
+library(knitr)
+kable(head(abstract$x, 2))
+```
+
+*End Output*
+
+Yep, it's not the prettiest sight. There's a lot of cleaning to be done in order to pull out dates, titles, and the abstracts. I'm not going to bore you with a full code walk-through of all the cleaning though. Instead, let's both just enjoy the beauty of the finished version:
+
+```{r warning=FALSE, echo=FALSE}
+mega_abstract %>%
+  select(cleantitle, testdate2, cleanab) %>%
+  head(1) %>%
+  kable()
+```
+
+*End Output*
+
+Let's talk about data exploration. Admittedly, there's not a lot of exploration you can do with text data that doesn't stray into analysis outright. The best place to start is to evaluate how well the scraper did and see if we're missing any large chunks of time.
+
+```{r echo=FALSE}
+testing <- mega_abstract %>%
+  mutate(any_count = ifelse(str_detect(str_to_lower(cleanab), ".*"), 1, 0))
+ggplot(testing, aes(x = testdate2, y = any_count)) +
+  geom_jitter() +
+  theme_classic() +
+  ylab("Exists") +
+  xlab("Date") +
+  ggtitle("The Scraper Missed Some Articles in 2008, 2011, 2013, and 2019")
+```
+
+Well it's pretty clear from the graph that the scraper was not able to capture everything from the archives. It's also possible that <https://technews.acm.org/> didn't publish anything during those periods, but that seems rather unlikely. What's more likely is that the html code changed slightly and broke the scraper. We're going to proceed with this analysis as-is. **It is important to remember that we do have some missing data here though.**
+
+## Results
+
+###### *Let's analyze some data!*
+
+We'll start off by looking at an animated word cloud of all title words on a day by day basis. From this we might be able to figure out which words tend to appear more often.
+
+### Day by Day Word Cloud
+
+![](https://i.imgur.com/EdOn2FP.gif)
+
+It's a little difficult to figure out what appears most often though. "Data" and "computer" are certainly very prominent throughout the animation.\
+Let's look at the top 10 most used title words overall instead. That should help us get a better sense of what the most referenced topics are and how they've changed over time. We're looking at the top 10 title words because generally, an article's title is a good way to figure out what the topic is.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# Find the top 10 words that appear in the most articles
+top_10 <- title_tib %>%
+  distinct(word, .keep_all = TRUE) %>%
+  arrange(desc(total)) %>%
+  head(10)
+# Create bar graph
+colors <- c("#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00", "#cab2d6", "#6a3d9a")
+
+ggplot(data = top_10, aes(x = reorder(word, -total), y = total, fill = colors)) +
+  geom_col() +
+  theme_classic() +
+  theme(legend.position = "none") +
+  xlab(element_blank()) +
+  ylab("Total") +
+  ggtitle("Top 10 Words Across Articles From 2007 to 2021") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+        text = element_text(size = 14))
+```
+
+After doing a bit of filtering and some plotting we can see that "computer" and "data" top our list of the most used title words just like in the word cloud. This is not necessarily unexpected since it makes sense that a tech newsletter would cover both those topics prominently.
+
+Let's see how these words have become more or less prevalent in article titles over time.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# Create graph of top 10 over the entire time period
+filter_words <- c("computer", "data", "researchers", "ai", "quantum", "research", "computing", "science", "software", "tech")
+top_10_over_time <- title_tib_day %>%
+  filter(word %in% filter_words)
+# Combined Usage (smoothed)
+ggplot(data = top_10_over_time, aes(x = testdate2, y = n)) +
+  geom_smooth(size = 1.25, se = FALSE) +
+  theme_classic() +
+  xlab("Date") +
+  ylab("Word Usage") +
+  ggtitle("Top 10 Words Cumulative Usage Over Time")
+```
+
+We see word usage spike around 2010 or 2011 for our top 10, after which the group declines and maintains a slightly elevated position. Overall, the group does appear to be gaining ground, but that could be caused by one or two specific words. Let's find out!
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# Separated Usage (smoothed)
+ggplot(data = top_10_over_time, aes(x = testdate2, y = n)) +
+  geom_smooth(aes(color = word), size = 1.25, se = FALSE) +
+  scale_color_manual(values = colors) +
+  theme_classic() +
+  xlab("Date") +
+  ylab("Word Usage") +
+  ggtitle("Top 10 Words Usage Over Time")
+```
+
+Interestingly enough, the upward trend seen in the cumulative graph appears to be caused almost exclusively by "ai". If you look closely, "quantum" also appears to have contributed to the overall upward trend. Almost all of the other top 10 words have remained consistent in their usage or have declined slightly. This could be an early indicator of a change in the most referenced topics, but it's probably too soon to tell.
+
+Now seems like the perfect time to try something a little more complex. Let's run a PCA on the abstracts and plot the results.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(lubridate)
+library(plotly)
+# Trying to average to the month level to tease out trends
+prc_month_avg <- prc
+prc_month_avg$Month_Yr <- format(as.Date(prc_month_avg$testdate2), "%Y-%m")
+
+
+prc_month_avg <- prc_month_avg%>%
+  group_by(Month_Yr) %>%
+  summarise(Female_STEM_month = mean(Female_STEM),
+            Users_Not_Microchips_month = mean(Users_Not_Microchips),
+            Female_Education_Not_Cybersecurity_month = mean(Female_Education_Not_Cybersecurity),
+            Cutting_Edge_Computing_month = mean(Cutting_Edge_Computing),
+            Self_Driving_Cars_month = mean(Self_Driving_Cars),
+            US_Cybersecurity_month = mean(US_Cybersecurity),
+            UX_month = mean(UX),
+            Healthcare_month = mean(Healthcare))
+
+colors <- c("Female_STEM" = "#1b9e77", "Users_Not_Microchips" = "#d95f02", "Healthcare" = "#7570b3", "Self_Driving_Cars" = "#e7298a", "Female_Education_Not_Cybersecurity" = "#66a61e", "Cutting_Edge_Computing" = "#e6ab02", "US_Cybersecurity" = "#a6761d", "UX" = "#666666")
+
+
+pc_plot <- ggplot(data = prc_month_avg, aes(x = parse_date_time(Month_Yr, "ym"), y = Female_STEM_month, group = 1)) +
+  geom_smooth(aes(color = "Female_STEM"), se = FALSE) +
+  geom_smooth(aes(y = Users_Not_Microchips_month, color = "Users_Not_Microchips"), se = FALSE) +
+  geom_smooth(aes(y = Healthcare_month, color = "Healthcare"), se = FALSE) +
+  geom_smooth(aes(y = Self_Driving_Cars_month, color = "Self_Driving_Cars"), se = FALSE) +
+  geom_smooth(aes(y = Female_Education_Not_Cybersecurity_month, color = "Female_Education_Not_Cybersecurity"), se = FALSE) +
+  geom_smooth(aes(y = Cutting_Edge_Computing_month, color = "Cutting_Edge_Computing"), se = FALSE) +
+  geom_smooth(aes(y = US_Cybersecurity_month, color = "US_Cybersecurity"), se = FALSE) +
+  geom_smooth(aes(y = UX_month, color = "UX"), se = FALSE) +
+  theme_classic() +
+  ylab("Category Strength") +
+  xlab("Time") +
+  labs(color = "Legend") +
+  scale_color_manual(values = colors) +
+  ggtitle("Cybersecurity Captures the Minds of Tech Writers")
+
+ggplotly(pc_plot)
+```
+
+I've selected the first eight principle components for further analysis and named them according to the words that have the biggest impact on them. For example, Self_Driving_Cars is named as such because words like vehicle, car, navigation, drive, autonomous, etc. had the highest impacts on that principle component.
+
+The PCA of the abstracts offers us a very different and more granular picture than the top 10 graphs. Here's a list of the take-aways:
+
+-   **Cyber Security** in the U.S. has become an incredibly important topic and it looks like it will continue to be.
+
+-   Articles that **ignore** topics related to silicon, **manufacturing**, engineering, etc. and **focus** more on the concept of **users** and identifiers have been consistently strong and have a significant upward trend.
+
+-   **Cutting Edge Computing** was rising steadily and then it dropped off drastically in 2014, possibly due to a decline in industry interest. Interest in Cutting Edge Computing recovered in 2016 and has been rising again since then.
+
+-   Articles that focused on **Women in academia**, but avoided discussing cyber security, had a tumultuous journey. This category started out extremely strong and then saw a massive dip in 2016 and a near full recovery by 2021.
+
+-   The **Healthcare** category followed a similar path as cyber security, but instead of continuing to rise it dropped off in 2019. This decline is rather puzzling though, as it would be reasonable to expect a surge in this area due to COVID-19.
+
+-   Strangely enough, articles on **Self-Driving Cars** remained at a constant strength throughout the dataset. I expected content on Self-Driving Cars to gain a significant amount of strength as the data approached 2020.
+
+-   Articles focused on **women in STEM** started moderately strong and peaked early around 2014 before dropping off sharply. This is an interesting contrast to point 4 where Female_Education_Not_Cybersecurity jumped back up. It's possible that the conversation has shifted away from women in STEM jobs and more towards STEM education paths (*which should ultimately translate into jobs*).
+
+-   The **UX** category centered around "interaction" and avoided words like vehicles and super computing started exceptionally strong. Unfortunately, this category's strength dropped incredibly fast around 2016 and has since continued to plummet.
+
+### Wrapping Things Up
+
+It's easy to see how cyber security will continue to grow in importance and the same with cutting edge computing. I think the biggest shock in the principle component analysis is the downturn of Healthcare, especially since the onset of COVID-19. The world around us constantly changes and while the top 10 analysis and the principle component analysis might not agree on how things change, both agree that things are changing.
